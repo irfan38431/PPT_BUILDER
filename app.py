@@ -2084,6 +2084,10 @@ def phase_review(config: Dict[str, Any]) -> None:
                             )
                         if new_image:
                             contents[idx].infographic_image = new_image
+                            # Clear stale full_slide_image so the new infographic
+                            # is actually used during PPTX rendering (ppt_generator
+                            # skips layout-specific rendering when full_slide_image exists)
+                            contents[idx].full_slide_image = None
                             st.session_state.slide_contents = contents
                             current_proposal.generated_prompt = edited_prompt
                             current_proposal.placement = new_placement

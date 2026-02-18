@@ -21,7 +21,7 @@ SLIDE_CONTENT_PROMPT = """You are a presentation content writer specializing in 
 {research_data}
 
 **Rules:**
-- Title must be actionable (verb + insight), max 8 words.
+- Title must be actionable (verb + insight), max 8 words,but layman understandable.
 - Bullets must be concise (max 15 words each), max 5 bullets.
 - NEVER repeat the same word or phrase in a bullet or title (e.g., "SIP & SIP" is WRONG).
 - Each bullet must convey a UNIQUE, distinct point — no redundancy.

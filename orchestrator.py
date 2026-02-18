@@ -799,6 +799,10 @@ class PipelineOrchestrator:
             for i, slide in enumerate(self.state.selected_outline.slides):
                 if slide.id == slide_number and i < len(self._slide_contents):
                     self._slide_contents[i].infographic_image = image_bytes
+                    # Clear stale full_slide_image so the new infographic takes
+                    # priority during PPTX rendering (ppt_generator checks
+                    # full_slide_image first and skips layout-specific renderers)
+                    self._slide_contents[i].full_slide_image = None
                     break
             # Update the corresponding proposal prompt
             for proposal in self._infographic_proposals:
