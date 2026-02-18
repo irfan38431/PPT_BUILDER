@@ -1,0 +1,35 @@
+# Ruff — fast Python linter & formatter
+# https://docs.astral.sh/ruff/
+
+target-version = "py311"
+line-length = 120
+
+[lint]
+# Start with a reasonable set; tighten over time
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort (import ordering)
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "S",    # flake8-bandit (security)
+]
+ignore = [
+    "E501",   # line too long — handled by formatter
+    "S101",   # assert usage — fine in tests
+    "B008",   # function call in default arg — needed for Pydantic Field()
+    "S603",   # subprocess call — not relevant here
+    "S607",   # partial executable path — not relevant
+]
+
+[lint.per-file-ignores]
+"tests/**" = ["S101", "S106"]  # Allow assert and hardcoded passwords in tests
+
+[lint.isort]
+known-first-party = ["agents", "engine", "generators", "prompts", "utils"]
+
+[format]
+quote-style = "double"
+indent-style = "space"

@@ -7,6 +7,7 @@ Now theme-aware with consultant-quality visuals matching ppt_generator.py.
 from __future__ import annotations
 
 import io
+import logging
 import textwrap
 from typing import List, Optional
 
@@ -24,6 +25,7 @@ from generators.themes import PresentationTheme, THEME_CORPORATE_BLUE
 from models import SlidePlan
 from utils.gcp_storage import get_storage_manager
 
+logger = logging.getLogger(__name__)
 
 # Slide dimensions (13.333 x 7.5 aspect = 16:9)
 FIG_W = 13.333
@@ -75,9 +77,7 @@ class SlidePreviewRenderer:
                 filename = storage.generate_unique_filename("images/previews", ".png")
                 storage.upload_file(res_bytes, filename, content_type="image/png")
         except Exception as e:
-            # Non-blocking, just log if failing is acceptable? 
-            # We don't have logger here easily unless passed. 
-            pass
+            logger.warning(f"Failed to upload slide preview to GCS: {e}")
 
         return res_bytes
 

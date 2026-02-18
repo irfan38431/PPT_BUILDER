@@ -76,6 +76,41 @@ class GCPStorageManager:
             logger.error(f"Failed to upload to GCS: {e}")
             return None
 
+    def download_file(self, blob_name: str) -> Optional[bytes]:
+        """Download a file from GCS and return its contents as bytes."""
+        if not self.enabled:
+            return None
+
+        try:
+            blob = self.bucket.blob(blob_name)
+            data = blob.download_as_bytes()
+            logger.info(f"Downloaded {blob_name} from GCS ({len(data)} bytes)")
+            return data
+        except Exception as e:
+            logger.error(f"Failed to download {blob_name} from GCS: {e}")
+            return None
+
+    def download_to_bytesio(self, blob_name: str) -> Optional[io.BytesIO]:
+        """Download a file from GCS into a BytesIO buffer."""
+        data = self.download_file(blob_name)
+        if data is None:
+            return None
+        buf = io.BytesIO(data)
+        buf.seek(0)
+        return buf
+
+    def exists(self, blob_name: str) -> bool:
+        """Check if a blob exists in the bucket."""
+        if not self.enabled:
+            return False
+
+        try:
+            blob = self.bucket.blob(blob_name)
+            return blob.exists()
+        except Exception as e:
+            logger.error(f"Failed to check existence of {blob_name}: {e}")
+            return False
+
     def generate_unique_filename(self, prefix: str, extension: str) -> str:
         """Generates a unique timestamped filename."""
         from datetime import datetime

@@ -197,5 +197,6 @@ class PipelineState(BaseModel):
     selected_outline: Optional[StorylineOutline] = None
     slide_contents: List[Dict[str, Any]] = Field(default_factory=list)
     output_file: Optional[str] = None
+    output_gcs_uri: Optional[str] = None
     errors: List[str] = Field(default_factory=list)
     current_step: str = ""

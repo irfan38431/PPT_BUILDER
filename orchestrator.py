@@ -876,8 +876,10 @@ class PipelineOrchestrator:
             storage = get_storage_manager()
             if storage.enabled:
                 gcs_path = f"presentations/{output_path.name}"
-                storage.upload_file(output_path, gcs_path, content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
-                self._log.info(f"Presentation uploaded to GCS: {gcs_path}")
+                gcs_uri = storage.upload_file(output_path, gcs_path, content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
+                if gcs_uri:
+                    self.state.output_gcs_uri = gcs_uri
+                    self._log.info(f"Presentation uploaded to GCS: {gcs_uri}")
 
             self.state.output_file = str(output_path)
             self._set_status("done", f"Presentation saved: {output_path.name}")

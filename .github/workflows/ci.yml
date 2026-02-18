@@ -1,0 +1,133 @@
+# ──────────────────────────────────────────────────────────────
+# CI Pipeline — Runs on every PR to main/develop
+# Linting, type-checking, and unit tests
+# ──────────────────────────────────────────────────────────────
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+# Cancel in-progress runs for the same PR/branch
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ── Lint & Format Check ──────────────────────────────────────
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # Cache pip dependencies to speed up subsequent runs
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-lint-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-lint-
+
+      - name: Install linting tools
+        run: pip install ruff
+
+      # Ruff check — fast Python linter (replaces flake8 + isort + pyflakes)
+      - name: Ruff lint
+        run: ruff check . --output-format=github
+
+      # Ruff format check — ensures consistent code style
+      - name: Ruff format check
+        run: ruff format --check .
+
+  # ── Unit Tests ───────────────────────────────────────────────
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # Cache pip dependencies
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-test-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-test-
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Run tests
+        env:
+          # Provide a dummy key so config.py doesn't fail on import
+          # Real API calls are mocked in tests
+          GEMINI_API_KEY: "test-dummy-key"
+        run: |
+          pytest tests/ \
+            --tb=short \
+            --co -q 2>/dev/null | head -1 | grep -q "no tests" && \
+            echo "⚠ No tests found — skipping" || \
+            pytest tests/ \
+              --tb=short \
+              -v \
+              --cov=. \
+              --cov-report=term-missing \
+              --cov-fail-under=0
+
+  # ── Import / Syntax Check ────────────────────────────────────
+  # Catches broken imports and syntax errors across all modules
+  import-check:
+    name: Import Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-import-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-import-
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Compile all .py files to check for syntax errors
+      - name: Syntax check
+        run: python -m compileall -q .
+
+      # Verify core modules can be imported without crashing
+      - name: Import check
+        env:
+          GEMINI_API_KEY: "test-dummy-key"
+        run: |
+          python -c "from models import PipelineState; print('models: OK')"
+          python -c "from config import Settings; print('config: OK')"
+          python -c "from utils.gcp_storage import GCPStorageManager; print('gcp_storage: OK')"
+          python -c "from utils.email_sender import send_email_with_attachment_bytes; print('email_sender: OK')"

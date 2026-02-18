@@ -7,7 +7,9 @@
       "Bash(python -c:*)",
       "Bash(python3:*)",
       "WebFetch(domain:python-pptx.readthedocs.io)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(pip install:*)",
+      "Bash(GEMINI_API_KEY=test-dummy-key python -m pytest:*)"
     ]
   }
 }

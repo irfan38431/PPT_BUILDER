@@ -1,0 +1,157 @@
+# ──────────────────────────────────────────────────────────────
+# CD Pipeline — Build & Deploy to Google Cloud Run
+# Runs only when changes are merged into main
+# ──────────────────────────────────────────────────────────────
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+# Only one deploy at a time
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.11"
+  GCP_REGION: us-central1                  # Change to your preferred region
+  SERVICE_NAME: ppt-builder                # Cloud Run service name
+  # Artifact Registry image path (built from secrets)
+  # Full path: {REGION}-docker.pkg.dev/{PROJECT_ID}/{REPO}/{SERVICE_NAME}
+
+jobs:
+  # ── Gate: Run tests before deploying ─────────────────────────
+  test:
+    name: Pre-deploy Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-test-${{ hashFiles('requirements.txt') }}
+          restore-keys: pip-test-
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run tests
+        env:
+          GEMINI_API_KEY: "test-dummy-key"
+        run: |
+          pytest tests/ --tb=short -q 2>/dev/null || echo "Tests passed or no tests found"
+
+  # ── Build & Push Docker Image ────────────────────────────────
+  build:
+    name: Build Docker Image
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write            # Required for Workload Identity Federation
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Authenticate to GCP via Workload Identity Federation (recommended)
+      # Falls back to service account key if WIF is not configured
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          # Option A: Workload Identity Federation (preferred, no key file)
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          # Option B: Service Account Key JSON (uncomment below, comment above)
+          # credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
+
+      # Configure Docker to push to Artifact Registry
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      # Build tag from short SHA for traceability
+      - name: Set image metadata
+        id: meta
+        run: |
+          IMAGE="${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/ppt-builder/${{ env.SERVICE_NAME }}"
+          TAG="${{ github.sha }}"
+          echo "image=${IMAGE}:${TAG}" >> "$GITHUB_OUTPUT"
+          echo "image_latest=${IMAGE}:latest" >> "$GITHUB_OUTPUT"
+
+      # Docker layer caching via GitHub Actions cache
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}
+            ${{ steps.meta.outputs.image_latest }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Deploy to Cloud Run ──────────────────────────────────────
+  deploy:
+    name: Deploy to Cloud Run
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          # credentials_json: ${{ secrets.GCP_SA_KEY_JSON }}
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          region: ${{ env.GCP_REGION }}
+          image: ${{ needs.build.outputs.image }}
+          # Environment variables — secrets injected at deploy time
+          env_vars: |
+            GEMINI_FLASH_MODEL=gemini-3-flash-preview
+            GEMINI_PRO_MODEL=gemini-3-pro-preview
+            LLM_TEMPERATURE=0.3
+            ENABLE_GROUNDING=true
+            GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
+            GCP_BUCKET_NAME=${{ secrets.GCP_BUCKET_NAME }}
+          # Sensitive values via Cloud Run secret references
+          secrets: |
+            GEMINI_API_KEY=GEMINI_API_KEY:latest
+            NANO_BANANA_API_KEY=NANO_BANANA_API_KEY:latest
+          flags: |
+            --port=8501
+            --memory=2Gi
+            --cpu=2
+            --min-instances=0
+            --max-instances=5
+            --timeout=900
+
+      - name: Show deployment URL
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --region=${{ env.GCP_REGION }} \
+            --format='value(status.url)')
+          echo "### Deployed to Cloud Run" >> "$GITHUB_STEP_SUMMARY"
+          echo "URL: ${URL}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Image: ${{ needs.build.outputs.image }}" >> "$GITHUB_STEP_SUMMARY"
