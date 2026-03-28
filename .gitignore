@@ -1,6 +1,4 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
+nul
 *$py.class
 
 # C extensions
@@ -149,3 +147,9 @@ Thumbs.db
 *.swp
 *.swo
 *~
+=======
+nul
+.venv
+__pycache__
+*.pyc
+ppt_builder/terraform/gcpkey.json
